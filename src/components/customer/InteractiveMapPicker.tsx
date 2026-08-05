@@ -1,0 +1,307 @@
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { MapPin, Navigation, Search, Loader2, Check } from 'lucide-react';
+
+interface InteractiveMapPickerProps {
+  initialLat?: number;
+  initialLng?: number;
+  onLocationSelected: (data: {
+    address: string;
+    city: string;
+    pincode: string;
+    lat: number;
+    lng: number;
+  }) => void;
+}
+
+export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
+  initialLat = 17.385044,
+  initialLng = 78.486671,
+  onLocationSelected,
+}) => {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markerInstanceRef = useRef<any>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [currentAddress, setCurrentAddress] = useState('Fetching pinned location address...');
+  const [currentCity, setCurrentCity] = useState('');
+  const [currentPincode, setCurrentPincode] = useState('');
+  const [currentLat, setCurrentLat] = useState(initialLat);
+  const [currentLng, setCurrentLng] = useState(initialLng);
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Reverse geocode via server-side route
+  const resolveAddressForCoords = async (latitude: number, longitude: number) => {
+    setIsGeocoding(true);
+    setCurrentLat(latitude);
+    setCurrentLng(longitude);
+
+    try {
+      const res = await fetch(`/api/geocode?lat=${latitude}&lng=${longitude}`);
+      const data = await res.json();
+
+      if (data.formatted_address) {
+        setCurrentAddress(data.formatted_address);
+        setCurrentCity(data.city || 'Local Area');
+        setCurrentPincode(data.pincode || '');
+        onLocationSelected({
+          address: data.formatted_address,
+          city: data.city || 'Local Area',
+          pincode: data.pincode || '',
+          lat: latitude,
+          lng: longitude,
+        });
+      }
+    } catch (err) {
+      console.error('Map geocode error', err);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  // Initialize Map SDK (Google Maps if Key exists, or Leaflet OpenStreetMap fallback)
+  useEffect(() => {
+    let isMounted = true;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    if (apiKey && apiKey.trim() !== '' && !apiKey.includes('your-google-maps')) {
+      // Load Google Maps Script Dynamically
+      if (typeof window !== 'undefined' && !(window as any).google) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          if (!isMounted) return;
+          initGoogleMap(initialLat, initialLng);
+        };
+        document.head.appendChild(script);
+      } else if ((window as any).google) {
+        initGoogleMap(initialLat, initialLng);
+      }
+    } else {
+      // Load Leaflet OpenStreetMap Fallback Dynamically
+      if (typeof window !== 'undefined') {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.async = true;
+        script.onload = () => {
+          if (!isMounted) return;
+          initLeafletMap(initialLat, initialLng);
+        };
+        document.head.appendChild(script);
+      }
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Google Maps Initialization
+  const initGoogleMap = (lat: number, lng: number) => {
+    if (!mapContainerRef.current || !(window as any).google) return;
+    const google = (window as any).google;
+
+    const map = new google.maps.Map(mapContainerRef.current, {
+      center: { lat, lng },
+      zoom: 16,
+      disableDefaultUI: true,
+      zoomControl: true,
+    });
+
+    mapInstanceRef.current = map;
+    setMapLoaded(true);
+
+    // Initial reverse geocode
+    resolveAddressForCoords(lat, lng);
+
+    // Pan listener
+    map.addListener('idle', () => {
+      const center = map.getCenter();
+      const newLat = center.lat();
+      const newLng = center.lng();
+      resolveAddressForCoords(newLat, newLng);
+    });
+  };
+
+  // Leaflet Map Initialization
+  const initLeafletMap = (lat: number, lng: number) => {
+    if (!mapContainerRef.current || !(window as any).L) return;
+    const L = (window as any).L;
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+    }
+
+    const map = L.map(mapContainerRef.current, {
+      center: [lat, lng],
+      zoom: 16,
+      zoomControl: false,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap',
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+    setMapLoaded(true);
+
+    resolveAddressForCoords(lat, lng);
+
+    map.on('moveend', () => {
+      const center = map.getCenter();
+      resolveAddressForCoords(center.lat, center.lng);
+    });
+  };
+
+  // Move Map Pin to User's Current GPS Location (Zomato/Swiggy "Locate Me")
+  const handleLocateMe = () => {
+    setIsLocating(true);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const newLat = pos.coords.latitude;
+          const newLng = pos.coords.longitude;
+          setIsLocating(false);
+
+          if (mapInstanceRef.current) {
+            if ((window as any).google && mapInstanceRef.current.panTo) {
+              mapInstanceRef.current.panTo({ lat: newLat, lng: newLng });
+              mapInstanceRef.current.setZoom(17);
+            } else if ((window as any).L && mapInstanceRef.current.setView) {
+              mapInstanceRef.current.setView([newLat, newLng], 17);
+            }
+          }
+          resolveAddressForCoords(newLat, newLng);
+        },
+        async () => {
+          setIsLocating(false);
+          // IP fallback
+          const res = await fetch('/api/geocode');
+          const data = await res.json();
+          if (data.latitude && data.longitude) {
+            if (mapInstanceRef.current) {
+              if ((window as any).google && mapInstanceRef.current.panTo) {
+                mapInstanceRef.current.panTo({ lat: data.latitude, lng: data.longitude });
+              } else if ((window as any).L && mapInstanceRef.current.setView) {
+                mapInstanceRef.current.setView([data.latitude, data.longitude], 16);
+              }
+            }
+            resolveAddressForCoords(data.latitude, data.longitude);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      setIsLocating(false);
+    }
+  };
+
+  // Search landmark / area
+  const handleSearchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`
+      );
+      const results = await res.json();
+      if (results && results.length > 0) {
+        const top = results[0];
+        const newLat = parseFloat(top.lat);
+        const newLng = parseFloat(top.lon);
+
+        if (mapInstanceRef.current) {
+          if ((window as any).google && mapInstanceRef.current.panTo) {
+            mapInstanceRef.current.panTo({ lat: newLat, lng: newLng });
+            mapInstanceRef.current.setZoom(16);
+          } else if ((window as any).L && mapInstanceRef.current.setView) {
+            mapInstanceRef.current.setView([newLat, newLng], 16);
+          }
+        }
+        resolveAddressForCoords(newLat, newLng);
+      }
+    } catch (err) {
+      console.error('Search location error', err);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search Input Bar */}
+      <form onSubmit={handleSearchSubmit} className="relative">
+        <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3.5" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search colony, area, landmark (e.g. Banjara Hills, Green Park)..."
+          className="w-full pl-10 pr-24 py-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-medium"
+        />
+        <button
+          type="submit"
+          className="absolute right-1.5 top-1.5 bottom-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
+        >
+          Search
+        </button>
+      </form>
+
+      {/* Interactive Map Container */}
+      <div className="relative w-full h-64 md:h-80 rounded-3xl overflow-hidden shadow-inner border border-neutral-200 bg-neutral-100">
+        <div ref={mapContainerRef} className="w-full h-full" />
+
+        {/* Zomato/Swiggy Center Draggable Location Pin */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-20 flex flex-col items-center">
+          <div className="bg-neutral-900 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg mb-1 whitespace-nowrap animate-bounce flex items-center space-x-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>Order Deliver Here</span>
+          </div>
+          <MapPin className="w-10 h-10 text-emerald-600 drop-shadow-xl fill-emerald-100" />
+          <div className="w-3 h-1.5 bg-black/30 rounded-full blur-[2px] mt-[-4px]" />
+        </div>
+
+        {/* Floating "Locate Me" Button */}
+        <button
+          type="button"
+          onClick={handleLocateMe}
+          disabled={isLocating}
+          className="absolute bottom-4 right-4 z-30 p-3 bg-white hover:bg-emerald-50 text-emerald-700 rounded-2xl shadow-xl border border-neutral-200 flex items-center space-x-2 text-xs font-black transition-all active:scale-95"
+        >
+          <Navigation className={`w-4 h-4 text-emerald-600 ${isLocating ? 'animate-spin' : ''}`} />
+          <span>{isLocating ? 'Locating...' : 'Locate Me'}</span>
+        </button>
+      </div>
+
+      {/* Real-time Address Card */}
+      <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-start space-x-3">
+        <MapPin className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">
+              Pinned Delivery Address
+            </span>
+            {isGeocoding && <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />}
+          </div>
+          <p className="text-xs font-bold text-neutral-900 mt-1 leading-snug">
+            {currentAddress}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
