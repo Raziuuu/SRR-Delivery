@@ -3,7 +3,7 @@
 -- Execute this script in your Supabase SQL Editor
 -- ========================================================
 
--- Enable UUID Extension
+-- Enable UUID Extension if available
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- --------------------------------------------------------
@@ -45,7 +45,7 @@ CREATE TRIGGER on_auth_user_created
 -- 2. ADDRESSES TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.addresses (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     title TEXT NOT NULL DEFAULT 'Home',
     address_line TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS public.addresses (
 -- 3. CATEGORIES TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.categories (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     image_url TEXT NOT NULL,
@@ -75,8 +75,8 @@ CREATE TABLE IF NOT EXISTS public.categories (
 -- 4. PRODUCTS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.products (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    category_id UUID REFERENCES public.categories(id) ON DELETE CASCADE NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    category_id TEXT REFERENCES public.categories(id) ON DELETE CASCADE NOT NULL,
     name TEXT NOT NULL,
     slug TEXT NOT NULL,
     description TEXT,
@@ -89,8 +89,8 @@ CREATE TABLE IF NOT EXISTS public.products (
 -- 5. BRANDS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.brands (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_id UUID REFERENCES public.products(id) ON DELETE CASCADE NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    product_id TEXT REFERENCES public.products(id) ON DELETE CASCADE NOT NULL,
     name TEXT NOT NULL,
     image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
@@ -100,10 +100,10 @@ CREATE TABLE IF NOT EXISTS public.brands (
 -- 6. VARIANTS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.variants (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    brand_id UUID REFERENCES public.brands(id) ON DELETE CASCADE NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    brand_id TEXT REFERENCES public.brands(id) ON DELETE CASCADE NOT NULL,
     unit TEXT NOT NULL CHECK (unit IN ('kg', 'gram', 'liter', 'ml', 'pcs')),
-    quantity TEXT NOT NULL, -- e.g. "100g", "500g", "1 kg"
+    quantity TEXT NOT NULL,
     price NUMERIC(10, 2) NOT NULL CHECK (price >= 0),
     stock INT NOT NULL DEFAULT 100 CHECK (stock >= 0),
     is_available BOOLEAN DEFAULT true,
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS public.variants (
 -- 7. COUPONS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.coupons (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     code TEXT UNIQUE NOT NULL,
     discount_percentage NUMERIC(5, 2) NOT NULL,
     min_order_amount NUMERIC(10, 2) DEFAULT 0,
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS public.coupons (
 -- 8. BANNERS TABLE (ANNOUNCEMENTS & OFFERS)
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.banners (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title TEXT NOT NULL,
     text TEXT NOT NULL,
     link TEXT,
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS public.banners (
 -- 9. ORDERS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     order_number TEXT UNIQUE NOT NULL,
     user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     customer_name TEXT NOT NULL,
@@ -165,8 +165,8 @@ CREATE TABLE IF NOT EXISTS public.orders (
 -- 10. ORDER ITEMS TABLE
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.order_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    order_id TEXT REFERENCES public.orders(id) ON DELETE CASCADE NOT NULL,
     product_name TEXT NOT NULL,
     brand_name TEXT NOT NULL,
     variant_quantity TEXT NOT NULL,
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS public.order_items (
 CREATE TABLE IF NOT EXISTS public.delivery_settings (
     id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     charge_per_km NUMERIC(10, 2) DEFAULT 10.00,
-    min_delivery_charge NUMERIC(10, 2) DEFAULT 25.00,
+    min_delivery_charge NUMERIC(10, 2) DEFAULT 40.00,
     max_delivery_radius_km NUMERIC(10, 2) DEFAULT 15.00,
     free_delivery_threshold NUMERIC(10, 2) DEFAULT 499.00,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
@@ -197,21 +197,21 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
     logo_url TEXT,
     contact_number TEXT DEFAULT '+91 98765 43210',
     whatsapp_number TEXT DEFAULT '+91 98765 43210',
-    business_address TEXT DEFAULT '123 SRR Main Road, Green Park, India',
+    business_address TEXT DEFAULT '123 SRR Main Road, Market Area',
     working_hours TEXT DEFAULT '7:00 AM - 10:00 PM (Everyday)',
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
 -- Seed initial settings
 INSERT INTO public.delivery_settings (id, charge_per_km, min_delivery_charge, max_delivery_radius_km, free_delivery_threshold)
-VALUES (1, 10.00, 25.00, 15.00, 499.00)
+VALUES (1, 10.00, 40.00, 15.00, 499.00)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.store_settings (id, store_name, contact_number, whatsapp_number, business_address, working_hours)
 VALUES (1, 'SRR Fresh Grocery Store', '+91 98765 43210', '+91 98765 43210', '123 SRR Main Road, Market Area', '7:00 AM - 10:00 PM (Daily)')
 ON CONFLICT (id) DO NOTHING;
 
--- Seed Categories
+-- Seed Categories (Your 8 exact categories)
 INSERT INTO public.categories (id, name, slug, image_url, display_order) VALUES
 ('cat-1', 'Vegetables', 'vegetables', 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', 1),
 ('cat-2', 'Fruits', 'fruits', 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=400&q=80', 2),
@@ -257,7 +257,7 @@ CREATE POLICY "Users view own orders" ON public.orders FOR SELECT USING (auth.ui
 CREATE POLICY "Users create orders" ON public.orders FOR INSERT WITH CHECK (true);
 CREATE POLICY "Users create order items" ON public.order_items FOR INSERT WITH CHECK (true);
 
--- Admin Full Access Policies (where role = 'admin' in profiles or auth token metadata)
+-- Admin Full Access Policies
 CREATE POLICY "Admins full access profiles" ON public.profiles FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );
@@ -290,12 +290,7 @@ CREATE POLICY "Admins full access store_settings" ON public.store_settings FOR A
 );
 
 -- --------------------------------------------------------
--- SUPABASE STORAGE BUCKET CONFIGURATION
--- Execute these in Supabase Storage dashboard or via script:
--- 1. products (Public)
--- 2. categories (Public)
--- 3. banners (Public)
--- 4. store (Public)
+-- SUPABASE STORAGE BUCKETS
 -- --------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public) VALUES ('products', 'products', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('categories', 'categories', true) ON CONFLICT (id) DO NOTHING;
