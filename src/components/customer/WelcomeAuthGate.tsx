@@ -46,7 +46,7 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
 
     if (res.success) {
       setStep('OTP');
-      setInfoMessage(res.message || `Verification code sent to +91 ${cleanDigits}. Demo code: 123456`);
+      setInfoMessage(res.message || `Verification code sent to +91 ${cleanDigits}`);
     } else {
       setErrorMessage(res.error || 'Failed to send OTP code');
     }

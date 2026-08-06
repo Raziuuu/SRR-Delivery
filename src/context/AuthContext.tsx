@@ -98,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return {
         success: true,
-        message: `OTP sent to ${cleanPhone}. (Use demo code: 123456)`,
+        message: `OTP request sent to ${cleanPhone}.`,
       };
     }
   };
@@ -144,21 +144,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Verify MSG91 OTP error', error);
       setIsLoading(false);
-
-      if (otpCode === '123456') {
-        const authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
-        const sessionUser: Profile = {
-          id: authenticatedUserId,
-          full_name: '',
-          phone: cleanPhone,
-          is_profile_completed: false,
-          role: 'customer',
-        };
-        setUser(sessionUser);
-        localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
-        return { success: true, isNewUser: true };
-      }
-
       return {
         success: false,
         error: 'Failed to verify OTP. Please try again.',
