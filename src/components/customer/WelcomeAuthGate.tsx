@@ -7,19 +7,11 @@ import {
   ShoppingBag,
   ShieldCheck,
   Truck,
-  ArrowRight,
   Loader2,
-  CheckCircle,
-  Eye,
   Sparkles,
 } from 'lucide-react';
 
-interface WelcomeAuthGateProps {
-  onUnlockGuestMode: () => void;
-}
-
-export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestMode }) => {
-  const router = useRouter();
+export const WelcomeAuthGate: React.FC = () => {
   const { loginWithGoogle } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,13 +52,10 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
           </div>
         </div>
 
-        <button
-          onClick={onUnlockGuestMode}
-          className="text-xs font-bold text-neutral-400 hover:text-emerald-400 bg-neutral-900/80 hover:bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-2xl transition-all flex items-center space-x-1.5"
-        >
-          <Eye className="w-4 h-4" />
-          <span>Preview Store as Guest</span>
-        </button>
+        <div className="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-emerald-400 text-xs font-bold">
+          <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+          <span>Authentication Required</span>
+        </div>
       </header>
 
       {/* Main Auth Gate Section */}
@@ -86,7 +75,7 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
           </h1>
 
           <p className="text-sm sm:text-base text-neutral-400 font-medium max-w-lg mx-auto lg:mx-0 leading-relaxed">
-            Sign in instantly with your Google account to unlock member discounts, real-time order tracking, and cash on delivery.
+            Please sign in with your Google account to access SRR Delivery store, view fresh groceries, and place orders.
           </p>
 
           <div className="grid grid-cols-3 gap-3 pt-2 max-w-md mx-auto lg:mx-0">
@@ -129,9 +118,9 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-2xl font-black text-white tracking-tight">Sign In to SRR Delivery</h2>
+            <h2 className="text-2xl font-black text-white tracking-tight">Welcome to SRR Delivery</h2>
             <p className="text-xs text-neutral-400 max-w-xs mx-auto">
-              Click below for instant 1-tap authentication with your Google account.
+              Please sign in with your Google account to enter the store.
             </p>
           </div>
 
@@ -168,7 +157,7 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>Continue with Google</span>
+                <span>Sign In with Google</span>
               </>
             )}
           </button>

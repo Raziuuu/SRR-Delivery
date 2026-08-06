@@ -46,9 +46,9 @@ export default function CustomerHomePage() {
     ? INITIAL_PRODUCTS.filter((p) => p.category_id === selectedCategory)
     : INITIAL_PRODUCTS;
 
-  // Render Mandatory Welcome Auth Gate before opening website if user is not authenticated
-  if (!user && !guestUnlocked && !isLoading) {
-    return <WelcomeAuthGate onUnlockGuestMode={() => setGuestUnlocked(true)} />;
+  // Render Mandatory Login Gate if user is not authenticated
+  if (!user && !isLoading) {
+    return <WelcomeAuthGate />;
   }
 
   return (
