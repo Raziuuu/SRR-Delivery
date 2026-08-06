@@ -2,12 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isFirebaseConfigured, auth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from '@/lib/firebase/client';
 import { Profile, UserRole } from '@/types';
 
 interface AuthContextType {
   user: Profile | null;
   isLoading: boolean;
-  sendPhoneOTP: (phone: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  sendPhoneOTP: (phone: string, recaptchaContainerId?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   verifyPhoneOTP: (phone: string, otp: string) => Promise<{ success: boolean; isNewUser?: boolean; error?: string }>;
   loginAdmin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
@@ -20,8 +21,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
-  // Load user session from localStorage or Supabase on mount
+  // Load user session from localStorage or Supabase/Firebase on mount
   useEffect(() => {
     const savedUser = localStorage.getItem('srr_user_session');
     if (savedUser) {
@@ -75,30 +77,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Send 6-digit OTP code to Phone Number
-  const sendPhoneOTP = async (phoneInput: string) => {
+  // Send 6-digit OTP code to Phone Number (Supports Firebase SMS, Supabase & Demo Mode)
+  const sendPhoneOTP = async (phoneInput: string, recaptchaContainerId = 'recaptcha-container') => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
-    if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: cleanPhone,
-      });
+    // 1. Firebase Phone Auth (Sends real free SMS if Firebase credentials are added)
+    if (isFirebaseConfigured() && typeof window !== 'undefined' && auth) {
+      try {
+        let recaptcha = (window as any).recaptchaVerifier;
+        if (!recaptcha) {
+          recaptcha = new RecaptchaVerifier(auth, recaptchaContainerId, {
+            size: 'invisible',
+            callback: () => {},
+          });
+          (window as any).recaptchaVerifier = recaptcha;
+        }
 
-      if (error) {
-        console.warn('Supabase Phone OTP API notice:', error.message);
+        const confirmation = await signInWithPhoneNumber(auth, cleanPhone, recaptcha);
+        setConfirmationResult(confirmation);
+        setIsLoading(false);
+        return {
+          success: true,
+          message: `Real SMS OTP sent to ${cleanPhone} via Firebase!`,
+        };
+      } catch (err: any) {
+        console.error('Firebase SMS error:', err);
+        // Fall back to demo mode if recaptcha or API key issue
+      }
+    }
+
+    // 2. Supabase Phone Auth (if enabled)
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        await supabase.auth.signInWithOtp({ phone: cleanPhone });
+      } catch (e) {
+        console.warn('Supabase OTP notice', e);
       }
     }
 
     setIsLoading(false);
     return {
       success: true,
-      message: `OTP sent successfully to ${cleanPhone}. (Use demo code: 123456)`,
+      message: `OTP sent to ${cleanPhone}. (Demo code: 123456)`,
     };
   };
 
-  // Verify Phone OTP (Supports Supabase Auth & Demo 123456 Fallback)
+  // Verify Phone OTP (Supports Firebase SMS, Supabase & Demo 123456)
   const verifyPhoneOTP = async (phoneInput: string, otpCode: string) => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
@@ -106,136 +132,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let authenticatedUserId: string | null = null;
     let metadataName = '';
 
-    if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: cleanPhone,
-        token: otpCode,
-        type: 'sms',
-      });
-
-      if (data?.user) {
-        authenticatedUserId = data.user.id;
-        metadataName = data.user.user_metadata?.full_name || '';
-      } else if (error && otpCode !== '123456') {
-        setIsLoading(false);
-        return { success: false, error: error.message || 'Invalid OTP verification code' };
-      }
-    }
-
-    // Demo / Fallback account resolution
-    if (!authenticatedUserId) {
-      if (otpCode !== '123456' && otpCode !== '000000') {
-        setIsLoading(false);
-        return { success: false, error: 'Invalid OTP code. Use 123456 to verify.' };
-      }
-      authenticatedUserId = 'usr-phone-' + cleanPhone.replace(/\D/g, '');
-    }
-
-    // Check if user already exists in saved session or local storage
-    const existingRaw = localStorage.getItem('srr_user_session');
-    let existingProfile: Profile | null = null;
-    if (existingRaw) {
+    // 1. Verify with Firebase if confirmationResult is present
+    if (confirmationResult && otpCode !== '123456') {
       try {
-        const parsed = JSON.parse(existingRaw);
-        if (parsed.phone === cleanPhone) existingProfile = parsed;
-      } catch (e) {}
+        const result = await confirmationResult.confirm(otpCode);
+        if (result.user) {
+          authenticatedUserId = result.user.uid;
+          metadataName = result.user.displayName || '';
+        }
+      } catch (err: any) {
+        console.error('Firebase OTP verification failed', err);
+        setIsLoading(false);
+        return { success: false, error: 'Invalid OTP code entered. Please try again.' };
+      }
     }
 
-    const isComplete = Boolean(existingProfile?.full_name && existingProfile?.is_profile_completed);
-    const profile: Profile = {
+    // 2. Verify with Supabase if configured
+    if (!authenticatedUserId && isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.verifyOtp({
+          phone: cleanPhone,
+          token: otpCode,
+          type: 'sms',
+        });
+        if (data?.user) {
+          authenticatedUserId = data.user.id;
+          metadataName = data.user.user_metadata?.full_name || '';
+        }
+      } catch (e) {
+        console.error('Supabase OTP verify error', e);
+      }
+    }
+
+    // 3. Fallback Demo Mode (123456)
+    if (!authenticatedUserId) {
+      if (otpCode !== '123456') {
+        setIsLoading(false);
+        return { success: false, error: 'Invalid OTP code. Use demo code 123456 or real Firebase SMS code.' };
+      }
+      authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
+    }
+
+    const sessionUser: Profile = {
       id: authenticatedUserId,
-      full_name: existingProfile?.full_name || metadataName || '',
+      full_name: metadataName || '',
       phone: cleanPhone,
-      gender: existingProfile?.gender,
-      date_of_birth: existingProfile?.date_of_birth,
-      avatar_url: existingProfile?.avatar_url,
+      is_profile_completed: Boolean(metadataName),
       role: 'customer',
-      is_profile_completed: isComplete,
     };
 
-    setUser(profile);
-    localStorage.setItem('srr_user_session', JSON.stringify(profile));
-
-    if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      await supabase.from('profiles').upsert({
-        id: profile.id,
-        full_name: profile.full_name || 'Customer',
-        phone: profile.phone,
-        role: 'customer',
-        is_profile_completed: isComplete,
-      });
-    }
+    setUser(sessionUser);
+    localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
 
     setIsLoading(false);
-    return { success: true, isNewUser: !isComplete };
+    return {
+      success: true,
+      isNewUser: !sessionUser.is_profile_completed,
+    };
   };
 
-  // Dedicated Admin Login for /admin
+  // Admin Login
   const loginAdmin = async (email: string, pass: string) => {
     setIsLoading(true);
-    if (email.toLowerCase().includes('admin') || pass === 'admin123') {
-      const adminProfile: Profile = {
-        id: 'admin-super-1',
-        full_name: 'SRR Store Administrator',
-        phone: '+91 98765 43210',
-        role: 'admin',
+    if (email === 'admin@srrfresh.com' && pass === 'admin123') {
+      const adminUser: Profile = {
+        id: 'admin-1',
+        full_name: 'SRR Admin Manager',
+        phone: '+91 9876543210',
         is_profile_completed: true,
+        role: 'admin',
       };
-      setUser(adminProfile);
-      localStorage.setItem('srr_user_session', JSON.stringify(adminProfile));
+      setUser(adminUser);
+      localStorage.setItem('srr_user_session', JSON.stringify(adminUser));
       setIsLoading(false);
       return { success: true };
     }
     setIsLoading(false);
-    return { success: false, error: 'Invalid Admin Credentials' };
+    return { success: false, error: 'Invalid admin credentials' };
   };
 
-  // Update Profile Information
+  // Update Profile
   const updateProfile = async (data: Partial<Profile>) => {
-    if (!user) return { success: false, error: 'User not authenticated' };
-    setIsLoading(true);
+    if (!user) return { success: false, error: 'Not authenticated' };
 
-    const updatedProfile: Profile = {
+    const updated = {
       ...user,
       ...data,
-      is_profile_completed: true,
+      is_profile_completed: Boolean(data.full_name || user.full_name),
     };
 
-    setUser(updatedProfile);
-    localStorage.setItem('srr_user_session', JSON.stringify(updatedProfile));
-
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createClient();
-        await supabase.from('profiles').upsert({
-          id: updatedProfile.id,
-          full_name: updatedProfile.full_name,
-          phone: updatedProfile.phone,
-          gender: updatedProfile.gender,
-          date_of_birth: updatedProfile.date_of_birth,
-          avatar_url: updatedProfile.avatar_url,
-          is_profile_completed: true,
-        });
-      } catch (e) {
-        console.error('Supabase profile update error', e);
-      }
-    }
-
-    setIsLoading(false);
+    setUser(updated);
+    localStorage.setItem('srr_user_session', JSON.stringify(updated));
     return { success: true };
   };
 
+  // Logout
   const logout = async () => {
+    setUser(null);
+    localStorage.removeItem('srr_user_session');
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
         await supabase.auth.signOut();
-      } catch (e) {}
+      } catch (e) {
+        console.error(e);
+      }
     }
-    setUser(null);
-    localStorage.removeItem('srr_user_session');
   };
 
   return (
@@ -252,12 +255,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+      {/* Invisible Recaptcha container for Firebase Phone Auth */}
+      <div id="recaptcha-container" />
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return context;
 };
