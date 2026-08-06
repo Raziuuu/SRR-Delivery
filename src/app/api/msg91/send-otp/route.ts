@@ -37,6 +37,15 @@ export async function POST(request: NextRequest) {
       const data = await msg91Res.json();
       console.log('MSG91 Response:', data);
 
+      // Handle MSG91 Error 311 (Duplicate request within 10s window)
+      if (data.code === 311 || data.message?.includes('twice within 10 seconds')) {
+        return NextResponse.json({
+          success: true,
+          message: `OTP was already sent to +${formattedMobile}! Please check your SMS.`,
+          msg91Data: data,
+        });
+      }
+
       if (data.type === 'success' || data.message === 'OTP sent successfully' || msg91Res.ok) {
         return NextResponse.json({
           success: true,
