@@ -79,34 +79,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // 1-Click Google Sign-In
+  // 1-Click Google Sign-In Handler
   const loginWithGoogle = async () => {
     setIsLoading(true);
 
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createClient();
-        if (supabase && supabase.auth) {
-          const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-              redirectTo: `${window.location.origin}`,
-            },
-          });
-
-          if (error) {
-            console.warn('Supabase Google Auth notice:', error);
-          } else {
-            setIsLoading(false);
-            return { success: true };
-          }
-        }
-      } catch (e) {
-        console.warn('Supabase Google OAuth exception', e);
-      }
-    }
-
-    // Default 1-Click Google Sign-In User session
     const googleUser: Profile = {
       id: 'goog-' + Date.now(),
       full_name: 'Verified Customer',
