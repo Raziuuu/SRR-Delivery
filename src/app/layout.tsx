@@ -4,7 +4,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 
 export const metadata: Metadata = {
-  title: 'SRR Fresh - Express Grocery Delivery',
+  title: 'SRR Delivery - Express Grocery Delivery',
   description: 'Farm-fresh vegetables, organic fruits, dairy & daily essentials delivered directly to your doorstep in Melkar, BC Road, and surrounding areas.',
 };
 

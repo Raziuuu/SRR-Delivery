@@ -55,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <span className="text-lg md:text-xl font-black text-neutral-900 tracking-tight block leading-none">
-                SRR <span className="text-emerald-600">Fresh</span>
+                SRR <span className="text-emerald-600">Delivery</span>
               </span>
               <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider block mt-0.5">
                 Grocery Delivery

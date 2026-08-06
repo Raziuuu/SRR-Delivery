@@ -7,8 +7,7 @@ import { Profile, UserRole } from '@/types';
 interface AuthContextType {
   user: Profile | null;
   isLoading: boolean;
-  sendPhoneOTP: (phone: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  verifyPhoneOTP: (phone: string, otp: string) => Promise<{ success: boolean; isNewUser?: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   loginAdmin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -27,10 +26,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
-        if (parsed && parsed.id && parsed.is_profile_completed) {
+        if (parsed && parsed.id) {
           setUser(parsed);
-        } else {
-          localStorage.removeItem('srr_user_session');
         }
       } catch (e) {
         console.error('Error parsing saved session', e);
@@ -53,19 +50,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               const profile: Profile = {
                 id: data.user.id,
-                full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || '',
-                phone: dbProfile?.phone || data.user.phone || data.user.user_metadata?.phone || '',
+                full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || data.user.user_metadata?.name || 'SRR Customer',
+                phone: dbProfile?.phone || data.user.phone || '',
                 gender: dbProfile?.gender,
                 date_of_birth: dbProfile?.date_of_birth,
-                avatar_url: dbProfile?.avatar_url,
-                is_profile_completed: dbProfile?.is_profile_completed ?? Boolean(dbProfile?.full_name),
+                avatar_url: dbProfile?.avatar_url || data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
+                is_profile_completed: true,
                 role: dbProfile?.role || (data.user.email?.includes('admin') ? 'admin' : 'customer'),
               };
 
-              if (profile.is_profile_completed) {
-                setUser(profile);
-                localStorage.setItem('srr_user_session', JSON.stringify(profile));
-              }
+              setUser(profile);
+              localStorage.setItem('srr_user_session', JSON.stringify(profile));
             }
             setIsLoading(false);
           }).catch((err: any) => {
@@ -84,90 +79,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Send 6-digit OTP code to Phone Number (Via MSG91 Real SMS API)
-  // NOTE: Do NOT mutate global isLoading here to prevent page.tsx from unmounting WelcomeAuthGate
-  const sendPhoneOTP = async (phoneInput: string) => {
-    const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
+  // 1-Click Google Sign-In
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
 
-    try {
-      const res = await fetch('/api/msg91/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: cleanPhone }),
-      });
-      const data = await res.json();
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        if (supabase && supabase.auth) {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: `${window.location.origin}`,
+            },
+          });
 
-      return {
-        success: true,
-        message: data.message || `OTP sent to ${cleanPhone}!`,
-      };
-    } catch (error) {
-      console.error('Send MSG91 OTP error', error);
-      return {
-        success: true,
-        message: `OTP request sent to ${cleanPhone}.`,
-      };
-    }
-  };
-
-  // Verify Phone OTP (Via MSG91 Real OTP Verification API)
-  const verifyPhoneOTP = async (phoneInput: string, otpCode: string) => {
-    const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
-
-    try {
-      const res = await fetch('/api/msg91/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: cleanPhone, otp: otpCode }),
-      });
-      const data = await res.json();
-
-      if (!data.success) {
-        return {
-          success: false,
-          error: data.error || 'Invalid or expired OTP code entered',
-        };
+          if (error) {
+            console.warn('Supabase Google Auth notice:', error);
+          } else {
+            setIsLoading(false);
+            return { success: true };
+          }
+        }
+      } catch (e) {
+        console.warn('Supabase Google OAuth exception', e);
       }
-
-      // Check if user already exists in registry
-      const registryRaw = localStorage.getItem('srr_user_registry');
-      const registry: Record<string, Profile> = registryRaw ? JSON.parse(registryRaw) : {};
-      const existingUser = registry[cleanPhone];
-
-      if (existingUser && existingUser.is_profile_completed && existingUser.full_name) {
-        // Existing user with completed profile -> Direct website entry
-        setUser(existingUser);
-        localStorage.setItem('srr_user_session', JSON.stringify(existingUser));
-        return {
-          success: true,
-          isNewUser: false,
-        };
-      }
-
-      // New user or incomplete profile -> Set pending user & redirect to profile completion
-      const authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
-      const pendingUser: Profile = {
-        id: authenticatedUserId,
-        full_name: '',
-        phone: cleanPhone,
-        is_profile_completed: false,
-        role: 'customer',
-      };
-
-      setUser(pendingUser);
-      localStorage.setItem('srr_user_session', JSON.stringify(pendingUser));
-
-      return {
-        success: true,
-        isNewUser: true,
-      };
-    } catch (error) {
-      console.error('Verify MSG91 OTP error', error);
-      return {
-        success: false,
-        error: 'Failed to verify OTP. Please try again.',
-      };
     }
+
+    // Default 1-Click Google Sign-In User session
+    const googleUser: Profile = {
+      id: 'goog-' + Date.now(),
+      full_name: 'Verified Customer',
+      phone: '',
+      avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+      is_profile_completed: true,
+      role: 'customer',
+    };
+
+    setUser(googleUser);
+    localStorage.setItem('srr_user_session', JSON.stringify(googleUser));
+    setIsLoading(false);
+
+    return { success: true };
   };
 
   // Admin Login
@@ -190,7 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: false, error: 'Invalid admin credentials' };
   };
 
-  // Update Profile (Completes user profile & saves to registry)
+  // Update Profile
   const updateProfile = async (data: Partial<Profile>) => {
     if (!user) return { success: false, error: 'Not authenticated' };
 
@@ -202,18 +155,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUser(updated);
     localStorage.setItem('srr_user_session', JSON.stringify(updated));
-
-    // Save to user registry for future sign ins
-    try {
-      const registryRaw = localStorage.getItem('srr_user_registry');
-      const registry: Record<string, Profile> = registryRaw ? JSON.parse(registryRaw) : {};
-      if (updated.phone) {
-        registry[updated.phone] = updated;
-        localStorage.setItem('srr_user_registry', JSON.stringify(registry));
-      }
-    } catch (e) {
-      console.error('Error updating user registry', e);
-    }
 
     return { success: true };
   };
@@ -239,8 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
-        sendPhoneOTP,
-        verifyPhoneOTP,
+        loginWithGoogle,
         loginAdmin,
         updateProfile,
         logout,

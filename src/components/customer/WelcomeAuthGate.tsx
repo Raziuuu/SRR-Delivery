@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import {
   ShoppingBag,
-  Smartphone,
   ShieldCheck,
   Truck,
   ArrowRight,
@@ -21,58 +20,22 @@ interface WelcomeAuthGateProps {
 
 export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestMode }) => {
   const router = useRouter();
-  const { sendPhoneOTP, verifyPhoneOTP } = useAuth();
-
-  const [phone, setPhone] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [step, setStep] = useState<'PHONE' | 'OTP'>('PHONE');
+  const { loginWithGoogle } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSendOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    const cleanDigits = phone.replace(/\D/g, '');
-
-    if (cleanDigits.length < 10) {
-      setErrorMessage('Please enter a valid 10-digit mobile phone number');
-      return;
-    }
-
+  const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
-    const res = await sendPhoneOTP(phone);
-    setIsSubmitting(false);
-
-    if (res.success) {
-      setStep('OTP');
-      setInfoMessage(res.message || `Verification code sent to +91 ${cleanDigits}`);
-    } else {
-      setErrorMessage(res.error || 'Failed to send OTP code');
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
     setErrorMessage(null);
-
-    if (otpCode.length < 6) {
-      setErrorMessage('Please enter the 6-digit OTP verification code');
-      return;
-    }
-
-    setIsSubmitting(true);
-    const res = await verifyPhoneOTP(phone, otpCode);
-    setIsSubmitting(false);
-
-    if (res.success) {
-      if (res.isNewUser) {
-        router.push('/profile/complete');
-      } else {
-        onUnlockGuestMode();
+    try {
+      const res = await loginWithGoogle();
+      setIsSubmitting(false);
+      if (!res.success) {
+        setErrorMessage(res.error || 'Google Sign-In failed. Please try again.');
       }
-    } else {
-      setErrorMessage(res.error || 'Invalid or expired OTP code entered');
+    } catch (e) {
+      setIsSubmitting(false);
+      setErrorMessage('An unexpected error occurred during Google Sign-In.');
     }
   };
 
@@ -89,10 +52,10 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
           </div>
           <div>
             <span className="text-xl font-black tracking-tight block leading-none text-white">
-              SRR <span className="text-emerald-400">Fresh</span>
+              SRR <span className="text-emerald-400">Delivery</span>
             </span>
             <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest block mt-0.5">
-              Grocery Delivery
+              Express Delivery App
             </span>
           </div>
         </div>
@@ -112,18 +75,18 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
         <div className="space-y-6 text-center lg:text-left">
           <div className="inline-flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/30 px-4 py-1.5 rounded-full text-emerald-400 text-xs font-extrabold">
             <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-            <span>Express Doorstep Delivery</span>
+            <span>Express 15-Minute Delivery</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-            Fresh Groceries Delivered <br className="hidden sm:inline" />
+            Fresh Products Delivered <br className="hidden sm:inline" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-500">
-              Direct to Your Home
+              Direct to Your Doorstep
             </span>
           </h1>
 
           <p className="text-sm sm:text-base text-neutral-400 font-medium max-w-lg mx-auto lg:mx-0 leading-relaxed">
-            Sign in or create an account with your mobile number to unlock daily discounts, cash on delivery, and express grocery arrival.
+            Sign in instantly with your Google account to unlock member discounts, real-time order tracking, and cash on delivery.
           </p>
 
           <div className="grid grid-cols-3 gap-3 pt-2 max-w-md mx-auto lg:mx-0">
@@ -133,7 +96,7 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
             </div>
             <div className="p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 text-center">
               <ShieldCheck className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-              <span className="text-xs font-bold text-white block">Fresh Produce</span>
+              <span className="text-xs font-bold text-white block">Fresh Quality</span>
             </div>
             <div className="p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 text-center">
               <span className="text-base font-extrabold text-amber-400 block mb-0.5">COD</span>
@@ -142,124 +105,83 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
           </div>
         </div>
 
-        {/* Right Side: Phone + OTP Sign In / Sign Up Card */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-1.5">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <h2 className="text-2xl font-black text-white tracking-tight">
-              {step === 'PHONE' ? 'Sign In / Create Account' : 'Verify 6-Digit OTP'}
-            </h2>
-            <p className="text-xs text-neutral-400">
-              {step === 'PHONE'
-                ? 'Enter your 10-digit mobile number to proceed'
-                : `Verification code sent to +91 ${phone.replace(/\D/g, '')}`}
+        {/* Right Side: Google 1-Tap Sign In Card */}
+        <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-neutral-800 border border-neutral-700 flex items-center justify-center shadow-inner">
+            <svg className="w-8 h-8" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-white tracking-tight">Sign In to SRR Delivery</h2>
+            <p className="text-xs text-neutral-400 max-w-xs mx-auto">
+              Click below for instant 1-tap authentication with your Google account.
             </p>
           </div>
 
           {errorMessage && (
-            <div className="p-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-bold rounded-2xl text-center">
+            <div className="p-3.5 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-bold rounded-2xl text-center">
               {errorMessage}
             </div>
           )}
 
-          {infoMessage && step === 'OTP' && (
-            <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs font-semibold rounded-2xl text-center flex items-center justify-center space-x-1.5">
-              <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>{infoMessage}</span>
-            </div>
-          )}
-
-          {/* Form Step 1: Mobile Phone Number */}
-          {step === 'PHONE' && (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-neutral-400 mb-1.5">
-                  Mobile Phone Number
-                </label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-3.5 text-sm font-black text-neutral-400 pointer-events-none">
-                    +91
-                  </div>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="98765 43210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full pl-14 pr-4 py-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl text-base font-bold text-white focus:outline-none focus:border-emerald-500"
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={isSubmitting}
+            className="w-full py-4 px-6 bg-white hover:bg-neutral-100 text-neutral-900 font-extrabold text-base rounded-2xl shadow-xl hover:shadow-2xl hover:shadow-white/10 flex items-center justify-center space-x-3 transition-all active:scale-98 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   />
-                </div>
-              </div>
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>Continue with Google</span>
+              </>
+            )}
+          </button>
 
-              <button
-                type="submit"
-                disabled={isSubmitting || phone.length < 10}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-black text-sm rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center space-x-2 transition-all active:scale-98 disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <span>Get Verification OTP</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* Form Step 2: 6-Digit OTP */}
-          {step === 'OTP' && (
-            <form onSubmit={handleVerifyOTP} className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-extrabold uppercase tracking-wider text-neutral-400">
-                    Enter OTP Code
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setStep('PHONE')}
-                    className="text-xs font-bold text-emerald-400 hover:underline"
-                  >
-                    Edit Number
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  placeholder="123456"
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center tracking-[0.5em] py-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl text-xl font-black text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting || otpCode.length < 6}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-black text-sm rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center space-x-2 transition-all active:scale-98 disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <ShieldCheck className="w-5 h-5" />
-                    <span>Verify & Unlock Grocery Store</span>
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+          <p className="text-[11px] text-neutral-500 font-medium">
+            🔒 Safe & Secure 256-Bit SSL Encrypted Login
+          </p>
         </div>
       </main>
 
       {/* Footer Bar */}
       <footer className="relative z-10 max-w-7xl mx-auto w-full px-6 py-6 text-center text-xs text-neutral-500 border-t border-neutral-900">
-        SRR Fresh Grocery Delivery © 2026 • Hyperlocal 15-Minute Doorstep Delivery
+        SRR Delivery App © 2026 • Hyperlocal 15-Minute Doorstep Delivery
       </footer>
     </div>
   );
