@@ -5,6 +5,24 @@ import { Address, CartItem, Coupon, Order, OrderStatus, PaymentMethod } from '@/
 import { INITIAL_COUPONS, INITIAL_DELIVERY_SETTINGS } from '@/lib/mockData';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
+const KALLADKA_STORE_LAT = 12.843960944421795;
+const KALLADKA_STORE_LNG = 75.07153269705995;
+
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c;
+  return Math.max(0.5, Math.round(d * 10) / 10);
+}
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (item: Omit<CartItem, 'id'>) => void;
@@ -38,7 +56,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number>(3.5);
+  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number>(2.5);
   const [userAddresses, setUserAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -60,71 +78,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedOrders = localStorage.getItem('srr_orders');
     if (savedOrders) {
       try { setOrders(JSON.parse(savedOrders)); } catch (e) { console.error(e); }
-    } else {
-      // Seed a sample order for demonstration
-      const sampleOrder: Order = {
-        id: 'ord-sample-1',
-        order_number: 'SRR-882091',
-        customer_name: 'Rahul Kumar',
-        customer_phone: '+91 98765 43210',
-        delivery_address: 'Flat 402, SRR Residency, Main Market Road, SRR City',
-        payment_method: 'UPI',
-        payment_status: 'paid',
-        status: 'Shopping in Progress',
-        grocery_amount: 540,
-        discount_amount: 54,
-        delivery_charge: 0,
-        total_amount: 486,
-        coupon_code: 'SRR10',
-        items: [
-          {
-            product_name: 'Premium Basmati Rice',
-            brand_name: 'India Gate',
-            variant_quantity: '1 kg',
-            price: 185,
-            quantity: 2,
-            subtotal: 370,
-            product_image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=400&q=80',
-          },
-          {
-            product_name: 'Fresh Cow Milk',
-            brand_name: 'Amul Taaza',
-            variant_quantity: '1 L',
-            price: 54,
-            quantity: 3,
-            subtotal: 162,
-            product_image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=400&q=80',
-          },
-        ],
-        created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setOrders([sampleOrder]);
-      localStorage.setItem('srr_orders', JSON.stringify([sampleOrder]));
     }
   }, []);
 
-  // Save cart to localStorage
+  // Save to localStorage when state changes
   useEffect(() => {
     localStorage.setItem('srr_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // Save addresses to localStorage
   useEffect(() => {
-    if (userAddresses.length > 0) {
-      localStorage.setItem('srr_addresses', JSON.stringify(userAddresses));
-    }
+    localStorage.setItem('srr_addresses', JSON.stringify(userAddresses));
   }, [userAddresses]);
 
-  // Save orders to localStorage
   useEffect(() => {
     localStorage.setItem('srr_orders', JSON.stringify(orders));
   }, [orders]);
 
+  // Recalculate distance whenever selected address changes
+  useEffect(() => {
+    if (selectedAddress && selectedAddress.latitude && selectedAddress.longitude) {
+      const dist = calculateDistanceKm(
+        KALLADKA_STORE_LAT,
+        KALLADKA_STORE_LNG,
+        selectedAddress.latitude,
+        selectedAddress.longitude
+      );
+      setDeliveryDistanceKm(dist);
+    }
+  }, [selectedAddress]);
+
   const addToCart = (newItem: Omit<CartItem, 'id'>) => {
-    const itemKey = `${newItem.product_id}_${newItem.brand_id}_${newItem.variant_id}`;
     setCart((prev) => {
+      const itemKey = `${newItem.product_id}-${newItem.brand_name}-${newItem.variant_quantity}`;
       const existingIndex = prev.findIndex((i) => i.id === itemKey);
+
       if (existingIndex > -1) {
         const updated = [...prev];
         updated[existingIndex].quantity += newItem.quantity;
@@ -217,21 +204,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteAddress = (id: string) => {
-    setUserAddresses((prev) => {
-      const filtered = prev.filter((a) => a.id !== id);
-      if (selectedAddress?.id === id) {
-        setSelectedAddress(filtered[0] || null);
-      }
-      return filtered;
-    });
+    setUserAddresses((prev) => prev.filter((a) => a.id !== id));
+    if (selectedAddress?.id === id) {
+      const remaining = userAddresses.filter((a) => a.id !== id);
+      setSelectedAddress(remaining.length > 0 ? remaining[0] : null);
+    }
   };
 
   const setDefaultAddress = (id: string) => {
     setUserAddresses((prev) =>
       prev.map((a) => ({ ...a, is_default: a.id === id }))
     );
-    const found = userAddresses.find((a) => a.id === id);
-    if (found) setSelectedAddress({ ...found, is_default: true });
+    const target = userAddresses.find((a) => a.id === id);
+    if (target) setSelectedAddress(target);
   };
 
   const placeOrder = async (
@@ -240,18 +225,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod: PaymentMethod
   ): Promise<Order> => {
     const orderNum = 'SRR-' + Math.floor(100000 + Math.random() * 900000);
-    const addressStr = selectedAddress
-      ? `${selectedAddress.address_line}, ${selectedAddress.city} - ${selectedAddress.pincode}`
-      : 'Customer Delivery Location';
-
     const newOrder: Order = {
       id: 'ord-' + Date.now(),
       order_number: orderNum,
       customer_name: customerName,
       customer_phone: customerPhone,
-      delivery_address: addressStr,
-      latitude: selectedAddress?.latitude || 17.385044,
-      longitude: selectedAddress?.longitude || 78.486671,
+      delivery_address: selectedAddress
+        ? `${selectedAddress.address_line}, ${selectedAddress.city} - ${selectedAddress.pincode}`
+        : 'Store Pickup Address',
+      latitude: selectedAddress?.latitude,
+      longitude: selectedAddress?.longitude,
       payment_method: paymentMethod,
       payment_status: paymentMethod === 'Cash on Delivery' ? 'pending' : 'paid',
       status: 'Order Placed',
@@ -260,40 +243,60 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       delivery_charge: deliveryCharge,
       total_amount: grandTotal,
       coupon_code: appliedCoupon?.code,
-      items: cart.map((i) => ({
-        product_name: i.product_name,
-        brand_name: i.brand_name,
-        variant_quantity: i.variant_quantity,
-        price: i.price,
-        quantity: i.quantity,
-        subtotal: i.price * i.quantity,
-        product_image: i.product_image,
-      })),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      items: cart.map((c) => ({
+        id: 'item-' + Math.random().toString(36).substring(2, 9),
+        product_name: c.product_name,
+        brand_name: c.brand_name,
+        variant_quantity: c.variant_quantity,
+        price: c.price,
+        quantity: c.quantity,
+        subtotal: c.price * c.quantity,
+        product_image: c.product_image,
+      })),
     };
 
+    // Save to Supabase DB if client is configured
     if (isSupabaseConfigured()) {
+      const supabase = createClient();
       try {
-        const supabase = createClient();
-        await supabase.from('orders').insert({
-          order_number: newOrder.order_number,
-          customer_name: newOrder.customer_name,
-          customer_phone: newOrder.customer_phone,
-          delivery_address: newOrder.delivery_address,
-          latitude: newOrder.latitude,
-          longitude: newOrder.longitude,
-          payment_method: newOrder.payment_method,
-          payment_status: newOrder.payment_status,
-          status: newOrder.status,
-          grocery_amount: newOrder.grocery_amount,
-          discount_amount: newOrder.discount_amount,
-          delivery_charge: newOrder.delivery_charge,
-          total_amount: newOrder.total_amount,
-          coupon_code: newOrder.coupon_code,
-        });
+        const { data: dbOrder, error: orderErr } = await supabase
+          .from('orders')
+          .insert({
+            order_number: newOrder.order_number,
+            customer_name: newOrder.customer_name,
+            customer_phone: newOrder.customer_phone,
+            delivery_address: newOrder.delivery_address,
+            latitude: newOrder.latitude,
+            longitude: newOrder.longitude,
+            payment_method: newOrder.payment_method,
+            payment_status: newOrder.payment_status,
+            status: newOrder.status,
+            grocery_amount: newOrder.grocery_amount,
+            discount_amount: newOrder.discount_amount,
+            delivery_charge: newOrder.delivery_charge,
+            total_amount: newOrder.total_amount,
+            coupon_code: newOrder.coupon_code,
+          })
+          .select()
+          .single();
+
+        if (!orderErr && dbOrder) {
+          const itemsToInsert = newOrder.items.map((i) => ({
+            order_id: dbOrder.id,
+            product_name: i.product_name,
+            brand_name: i.brand_name,
+            variant_quantity: i.variant_quantity,
+            price: i.price,
+            quantity: i.quantity,
+            subtotal: i.subtotal,
+            product_image: i.product_image,
+          }));
+          await supabase.from('order_items').insert(itemsToInsert);
+        }
       } catch (e) {
-        console.error('Supabase order insert error', e);
+        console.error('Failed to sync order to Supabase', e);
       }
     }
 
@@ -304,21 +307,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
     setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId || o.order_number === orderId
-          ? { ...o, status, updated_at: new Date().toISOString() }
-          : o
-      )
+      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
     );
-
-    if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      supabase
-        .from('orders')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .then(() => {});
-    }
   };
 
   const getOrderById = (orderId: string) => {
@@ -362,6 +352,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useCart = () => {
   const context = useContext(CartContext);
-  if (!context) throw new Error('useCart must be used within CartProvider');
+  if (!context) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
   return context;
 };

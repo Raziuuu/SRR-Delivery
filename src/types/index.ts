@@ -130,7 +130,7 @@ export interface Order {
   coupon_code?: string;
   items: OrderItem[];
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface DeliverySettings {
