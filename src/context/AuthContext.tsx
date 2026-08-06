@@ -50,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               const profile: Profile = {
                 id: data.user.id,
-                full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || data.user.user_metadata?.name || 'SRR Customer',
+                full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'SRR Customer',
                 phone: dbProfile?.phone || data.user.phone || '',
                 gender: dbProfile?.gender,
                 date_of_birth: dbProfile?.date_of_birth,
@@ -79,10 +79,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // 1-Click Google Sign-In Handler
+  // 1-Click Google OAuth Sign-In via Supabase
   const loginWithGoogle = async () => {
     setIsLoading(true);
 
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        if (supabase && supabase.auth) {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: `${window.location.origin}`,
+            },
+          });
+
+          if (error) {
+            console.error('Supabase Google OAuth error:', error);
+            setIsLoading(false);
+            return { success: false, error: error.message };
+          }
+
+          return { success: true };
+        }
+      } catch (e: any) {
+        console.error('Supabase Google OAuth exception', e);
+        setIsLoading(false);
+        return { success: false, error: e.message || 'Google Auth exception' };
+      }
+    }
+
+    // Fallback 1-Click Google session for local testing
     const googleUser: Profile = {
       id: 'goog-' + Date.now(),
       full_name: 'Verified Customer',
