@@ -87,9 +87,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
-            .then((res) => res.json())
+            .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
-              if (data.formatted_address) {
+              if (data && data.formatted_address) {
                 const detectedAddress: Address = {
                   id: 'addr-live-gps',
                   title: 'Current Location',

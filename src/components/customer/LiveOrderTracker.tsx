@@ -42,7 +42,7 @@ export const LiveOrderTracker: React.FC<LiveOrderTrackerProps> = ({ orderId, onC
             table: 'orders',
             filter: `order_number=eq.${orderId}`,
           },
-          (payload) => {
+          (payload: any) => {
             if (payload.new) {
               setCurrentOrder((prev) => (prev ? { ...prev, status: payload.new.status } : undefined));
             }

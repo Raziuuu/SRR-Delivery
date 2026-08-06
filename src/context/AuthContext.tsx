@@ -33,30 +33,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      supabase.auth.getUser().then(async ({ data }) => {
-        if (data.user) {
-          const { data: dbProfile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
+      try {
+        const supabase = createClient();
+        if (supabase && supabase.auth) {
+          supabase.auth.getUser().then(async (res: any) => {
+            const data = res?.data;
+            if (data?.user) {
+              const { data: dbProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', data.user.id)
+                .single();
 
-          const profile: Profile = {
-            id: data.user.id,
-            full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || '',
-            phone: dbProfile?.phone || data.user.phone || data.user.user_metadata?.phone || '',
-            gender: dbProfile?.gender,
-            date_of_birth: dbProfile?.date_of_birth,
-            avatar_url: dbProfile?.avatar_url,
-            is_profile_completed: dbProfile?.is_profile_completed ?? Boolean(dbProfile?.full_name),
-            role: dbProfile?.role || (data.user.email?.includes('admin') ? 'admin' : 'customer'),
-          };
-          setUser(profile);
-          localStorage.setItem('srr_user_session', JSON.stringify(profile));
+              const profile: Profile = {
+                id: data.user.id,
+                full_name: dbProfile?.full_name || data.user.user_metadata?.full_name || '',
+                phone: dbProfile?.phone || data.user.phone || data.user.user_metadata?.phone || '',
+                gender: dbProfile?.gender,
+                date_of_birth: dbProfile?.date_of_birth,
+                avatar_url: dbProfile?.avatar_url,
+                is_profile_completed: dbProfile?.is_profile_completed ?? Boolean(dbProfile?.full_name),
+                role: dbProfile?.role || (data.user.email?.includes('admin') ? 'admin' : 'customer'),
+              };
+              setUser(profile);
+              localStorage.setItem('srr_user_session', JSON.stringify(profile));
+            }
+            setIsLoading(false);
+          }).catch((err: any) => {
+            console.error('Supabase auth error', err);
+            setIsLoading(false);
+          });
+        } else {
+          setIsLoading(false);
         }
+      } catch (err) {
+        console.error('Auth context init error', err);
         setIsLoading(false);
-      });
+      }
     } else {
       setIsLoading(false);
     }
