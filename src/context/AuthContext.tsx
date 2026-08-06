@@ -26,9 +26,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedUser = localStorage.getItem('srr_user_session');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.id && parsed.is_profile_completed) {
+          setUser(parsed);
+        } else {
+          localStorage.removeItem('srr_user_session');
+        }
       } catch (e) {
         console.error('Error parsing saved session', e);
+        localStorage.removeItem('srr_user_session');
       }
     }
 

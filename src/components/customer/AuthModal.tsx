@@ -39,7 +39,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     if (res.success) {
       setStep('OTP');
-      setInfoMessage(res.message || `OTP sent to +91 ${cleanDigits}. Demo code: 123456`);
+      setInfoMessage(res.message || `OTP sent to +91 ${cleanDigits}`);
     } else {
       setErrorMessage(res.error || 'Failed to send OTP code');
     }

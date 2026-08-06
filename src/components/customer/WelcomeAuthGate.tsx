@@ -68,9 +68,11 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
     if (res.success) {
       if (res.isNewUser) {
         router.push('/profile/complete');
+      } else {
+        onUnlockGuestMode();
       }
     } else {
-      setErrorMessage(res.error || 'Invalid OTP code. Try 123456');
+      setErrorMessage(res.error || 'Invalid or expired OTP code entered');
     }
   };
 
