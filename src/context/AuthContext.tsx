@@ -61,8 +61,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 is_profile_completed: dbProfile?.is_profile_completed ?? Boolean(dbProfile?.full_name),
                 role: dbProfile?.role || (data.user.email?.includes('admin') ? 'admin' : 'customer'),
               };
-              setUser(profile);
-              localStorage.setItem('srr_user_session', JSON.stringify(profile));
+
+              if (profile.is_profile_completed) {
+                setUser(profile);
+                localStorage.setItem('srr_user_session', JSON.stringify(profile));
+              }
             }
             setIsLoading(false);
           }).catch((err: any) => {
@@ -81,9 +84,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Send 6-digit OTP code to Phone Number (Via MSG91 Real SMS API with Demo Fallback)
+  // Send 6-digit OTP code to Phone Number (Via MSG91 Real SMS API)
+  // NOTE: Do NOT mutate global isLoading here to prevent page.tsx from unmounting WelcomeAuthGate
   const sendPhoneOTP = async (phoneInput: string) => {
-    setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
     try {
@@ -94,14 +97,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       const data = await res.json();
 
-      setIsLoading(false);
       return {
         success: true,
         message: data.message || `OTP sent to ${cleanPhone}!`,
       };
     } catch (error) {
       console.error('Send MSG91 OTP error', error);
-      setIsLoading(false);
       return {
         success: true,
         message: `OTP request sent to ${cleanPhone}.`,
@@ -111,7 +112,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Verify Phone OTP (Via MSG91 Real OTP Verification API)
   const verifyPhoneOTP = async (phoneInput: string, otpCode: string) => {
-    setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
     try {
@@ -123,15 +123,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await res.json();
 
       if (!data.success) {
-        setIsLoading(false);
         return {
           success: false,
           error: data.error || 'Invalid or expired OTP code entered',
         };
       }
 
+      // Check if user already exists in registry
+      const registryRaw = localStorage.getItem('srr_user_registry');
+      const registry: Record<string, Profile> = registryRaw ? JSON.parse(registryRaw) : {};
+      const existingUser = registry[cleanPhone];
+
+      if (existingUser && existingUser.is_profile_completed && existingUser.full_name) {
+        // Existing user with completed profile -> Direct website entry
+        setUser(existingUser);
+        localStorage.setItem('srr_user_session', JSON.stringify(existingUser));
+        return {
+          success: true,
+          isNewUser: false,
+        };
+      }
+
+      // New user or incomplete profile -> Set pending user & redirect to profile completion
       const authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
-      const sessionUser: Profile = {
+      const pendingUser: Profile = {
         id: authenticatedUserId,
         full_name: '',
         phone: cleanPhone,
@@ -139,17 +154,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: 'customer',
       };
 
-      setUser(sessionUser);
-      localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
+      setUser(pendingUser);
+      localStorage.setItem('srr_user_session', JSON.stringify(pendingUser));
 
-      setIsLoading(false);
       return {
         success: true,
         isNewUser: true,
       };
     } catch (error) {
       console.error('Verify MSG91 OTP error', error);
-      setIsLoading(false);
       return {
         success: false,
         error: 'Failed to verify OTP. Please try again.',
@@ -177,18 +190,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: false, error: 'Invalid admin credentials' };
   };
 
-  // Update Profile
+  // Update Profile (Completes user profile & saves to registry)
   const updateProfile = async (data: Partial<Profile>) => {
     if (!user) return { success: false, error: 'Not authenticated' };
 
-    const updated = {
+    const updated: Profile = {
       ...user,
       ...data,
-      is_profile_completed: Boolean(data.full_name || user.full_name),
+      is_profile_completed: true,
     };
 
     setUser(updated);
     localStorage.setItem('srr_user_session', JSON.stringify(updated));
+
+    // Save to user registry for future sign ins
+    try {
+      const registryRaw = localStorage.getItem('srr_user_registry');
+      const registry: Record<string, Profile> = registryRaw ? JSON.parse(registryRaw) : {};
+      if (updated.phone) {
+        registry[updated.phone] = updated;
+        localStorage.setItem('srr_user_registry', JSON.stringify(registry));
+      }
+    } catch (e) {
+      console.error('Error updating user registry', e);
+    }
+
     return { success: true };
   };
 
