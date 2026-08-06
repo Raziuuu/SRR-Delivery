@@ -23,8 +23,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [landmark, setLandmark] = useState('');
   const [city, setCity] = useState('');
   const [pincode, setPincode] = useState('');
-  const [lat, setLat] = useState<number>(17.385044);
-  const [lng, setLng] = useState<number>(78.486671);
+  const [lat, setLat] = useState<number>(12.86356450672943);
+  const [lng, setLng] = useState<number>(75.05230341291362);
   const [showAddForm, setShowAddForm] = useState(userAddresses.length === 0);
 
   if (!isOpen) return null;

@@ -16,8 +16,8 @@ interface InteractiveMapPickerProps {
 }
 
 export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
-  initialLat = 17.385044,
-  initialLng = 78.486671,
+  initialLat = 12.86356450672943,
+  initialLng = 75.05230341291362,
   onLocationSelected,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +58,33 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
       console.error('Map geocode error', err);
     } finally {
       setIsGeocoding(false);
+    }
+  };
+
+  // Helper to auto-center map on user's real-time device GPS location
+  const autoDetectDeviceLocation = (mapInstance: any) => {
+    if ('geolocation' in navigator) {
+      setIsLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setIsLocating(false);
+          const userLat = pos.coords.latitude;
+          const userLng = pos.coords.longitude;
+          if (mapInstance) {
+            if ((window as any).google && mapInstance.panTo) {
+              mapInstance.panTo({ lat: userLat, lng: userLng });
+              mapInstance.setZoom(16);
+            } else if ((window as any).L && mapInstance.setView) {
+              mapInstance.setView([userLat, userLng], 16);
+            }
+          }
+          resolveAddressForCoords(userLat, userLng);
+        },
+        () => {
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
     }
   };
 
@@ -119,6 +146,7 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
 
     mapInstanceRef.current = map;
     resolveAddressForCoords(lat, lng);
+    autoDetectDeviceLocation(map);
 
     map.addListener('idle', () => {
       const center = map.getCenter();
@@ -150,6 +178,7 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
 
     mapInstanceRef.current = map;
     resolveAddressForCoords(lat, lng);
+    autoDetectDeviceLocation(map);
 
     map.on('moveend', () => {
       const center = map.getCenter();
@@ -182,44 +211,8 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
 
   // Move Map Pin to User's Current GPS Location
   const handleLocateMe = () => {
-    setIsLocating(true);
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const newLat = pos.coords.latitude;
-          const newLng = pos.coords.longitude;
-          setIsLocating(false);
-
-          if (mapInstanceRef.current) {
-            if ((window as any).google && mapInstanceRef.current.panTo) {
-              mapInstanceRef.current.panTo({ lat: newLat, lng: newLng });
-              mapInstanceRef.current.setZoom(17);
-            } else if ((window as any).L && mapInstanceRef.current.setView) {
-              mapInstanceRef.current.setView([newLat, newLng], 17);
-            }
-          }
-          resolveAddressForCoords(newLat, newLng);
-        },
-        async () => {
-          setIsLocating(false);
-          // IP fallback
-          const res = await fetch('/api/geocode');
-          const data = await res.json();
-          if (data.latitude && data.longitude) {
-            if (mapInstanceRef.current) {
-              if ((window as any).google && mapInstanceRef.current.panTo) {
-                mapInstanceRef.current.panTo({ lat: data.latitude, lng: data.longitude });
-              } else if ((window as any).L && mapInstanceRef.current.setView) {
-                mapInstanceRef.current.setView([data.latitude, data.longitude], 16);
-              }
-            }
-            resolveAddressForCoords(data.latitude, data.longitude);
-          }
-        },
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    } else {
-      setIsLocating(false);
+    if (mapInstanceRef.current) {
+      autoDetectDeviceLocation(mapInstanceRef.current);
     }
   };
 
