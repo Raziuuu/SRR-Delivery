@@ -189,10 +189,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </>
               )}
             </button>
-
-            <p className="text-[11px] text-center text-neutral-400 font-medium">
-              Demo Test Code: <span className="font-bold text-emerald-700">123456</span>
-            </p>
           </form>
         )}
       </div>

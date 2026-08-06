@@ -252,10 +252,6 @@ export const WelcomeAuthGate: React.FC<WelcomeAuthGateProps> = ({ onUnlockGuestM
                   </>
                 )}
               </button>
-
-              <p className="text-[11px] text-center text-neutral-500 font-medium">
-                Demo Test Verification Code: <span className="font-bold text-emerald-400">123456</span>
-              </p>
             </form>
           )}
         </div>
