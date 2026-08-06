@@ -342,8 +342,8 @@ export const INITIAL_BANNERS: Banner[] = [
 
 export const INITIAL_DELIVERY_SETTINGS: DeliverySettings = {
   charge_per_km: 10,
-  min_delivery_charge: 25,
-  max_delivery_radius_km: 15,
+  min_delivery_charge: 40,
+  max_delivery_radius_km: 6,
   free_delivery_threshold: 499,
 };
 
