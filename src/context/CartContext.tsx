@@ -5,8 +5,8 @@ import { Address, CartItem, Coupon, Order, OrderStatus, PaymentMethod } from '@/
 import { INITIAL_COUPONS, INITIAL_DELIVERY_SETTINGS } from '@/lib/mockData';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
-const KALLADKA_STORE_LAT = 12.843960944421795;
-const KALLADKA_STORE_LNG = 75.07153269705995;
+const STORE_LAT = 12.86356450672943;
+const STORE_LNG = 75.05230341291362;
 
 function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Radius of earth in km
@@ -98,8 +98,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (selectedAddress && selectedAddress.latitude && selectedAddress.longitude) {
       const dist = calculateDistanceKm(
-        KALLADKA_STORE_LAT,
-        KALLADKA_STORE_LNG,
+        STORE_LAT,
+        STORE_LNG,
         selectedAddress.latitude,
         selectedAddress.longitude
       );
