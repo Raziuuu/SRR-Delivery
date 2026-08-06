@@ -23,13 +23,14 @@ export async function POST(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
-      // MSG91 Send OTP v5 API Call
+      // MSG91 Send OTP v5 API Call (requires body: '{}')
       const msg91Res = await fetch(url, {
         method: 'POST',
         headers: {
           authkey: authKey,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({}),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
