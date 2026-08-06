@@ -2,13 +2,12 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { isFirebaseConfigured, auth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from '@/lib/firebase/client';
 import { Profile, UserRole } from '@/types';
 
 interface AuthContextType {
   user: Profile | null;
   isLoading: boolean;
-  sendPhoneOTP: (phone: string, recaptchaContainerId?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  sendPhoneOTP: (phone: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   verifyPhoneOTP: (phone: string, otp: string) => Promise<{ success: boolean; isNewUser?: boolean; error?: string }>;
   loginAdmin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
@@ -21,9 +20,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
-  // Load user session from localStorage or Supabase/Firebase on mount
+  // Load user session from localStorage or Supabase on mount
   useEffect(() => {
     const savedUser = localStorage.getItem('srr_user_session');
     if (savedUser) {
@@ -77,41 +75,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Send 6-digit OTP code to Phone Number (Supports Firebase SMS, Supabase & Demo Mode)
-  const sendPhoneOTP = async (phoneInput: string, recaptchaContainerId = 'recaptcha-container') => {
+  // Send 6-digit OTP code to Phone Number (Supabase & Demo Mode)
+  const sendPhoneOTP = async (phoneInput: string) => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
-    // 1. Firebase Phone Auth (Sends real free SMS if Firebase credentials are added)
-    if (isFirebaseConfigured() && typeof window !== 'undefined' && auth) {
-      try {
-        let recaptcha = (window as any).recaptchaVerifier;
-        if (!recaptcha) {
-          recaptcha = new RecaptchaVerifier(auth, recaptchaContainerId, {
-            size: 'invisible',
-            callback: () => {},
-          });
-          (window as any).recaptchaVerifier = recaptcha;
-        }
-
-        const confirmation = await signInWithPhoneNumber(auth, cleanPhone, recaptcha);
-        setConfirmationResult(confirmation);
-        setIsLoading(false);
-        return {
-          success: true,
-          message: `Real SMS OTP sent to ${cleanPhone} via Firebase!`,
-        };
-      } catch (err: any) {
-        console.error('Firebase SMS error:', err);
-        // Fall back to demo mode if recaptcha or API key issue
-      }
-    }
-
-    // 2. Supabase Phone Auth (if enabled)
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
-        await supabase.auth.signInWithOtp({ phone: cleanPhone });
+        if (supabase && supabase.auth) {
+          await supabase.auth.signInWithOtp({ phone: cleanPhone });
+        }
       } catch (e) {
         console.warn('Supabase OTP notice', e);
       }
@@ -120,11 +94,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
     return {
       success: true,
-      message: `OTP sent to ${cleanPhone}. (Demo code: 123456)`,
+      message: `OTP sent to ${cleanPhone}. (Use demo code: 123456)`,
     };
   };
 
-  // Verify Phone OTP (Supports Firebase SMS, Supabase & Demo 123456)
+  // Verify Phone OTP (Supabase & Demo 123456 Fallback)
   const verifyPhoneOTP = async (phoneInput: string, otpCode: string) => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
@@ -132,44 +106,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let authenticatedUserId: string | null = null;
     let metadataName = '';
 
-    // 1. Verify with Firebase if confirmationResult is present
-    if (confirmationResult && otpCode !== '123456') {
-      try {
-        const result = await confirmationResult.confirm(otpCode);
-        if (result.user) {
-          authenticatedUserId = result.user.uid;
-          metadataName = result.user.displayName || '';
-        }
-      } catch (err: any) {
-        console.error('Firebase OTP verification failed', err);
-        setIsLoading(false);
-        return { success: false, error: 'Invalid OTP code entered. Please try again.' };
-      }
-    }
-
-    // 2. Verify with Supabase if configured
-    if (!authenticatedUserId && isSupabaseConfigured()) {
+    // Verify with Supabase if configured
+    if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
-        const { data } = await supabase.auth.verifyOtp({
-          phone: cleanPhone,
-          token: otpCode,
-          type: 'sms',
-        });
-        if (data?.user) {
-          authenticatedUserId = data.user.id;
-          metadataName = data.user.user_metadata?.full_name || '';
+        if (supabase && supabase.auth) {
+          const { data } = await supabase.auth.verifyOtp({
+            phone: cleanPhone,
+            token: otpCode,
+            type: 'sms',
+          });
+          if (data?.user) {
+            authenticatedUserId = data.user.id;
+            metadataName = data.user.user_metadata?.full_name || '';
+          }
         }
       } catch (e) {
         console.error('Supabase OTP verify error', e);
       }
     }
 
-    // 3. Fallback Demo Mode (123456)
+    // Fallback Demo Mode (123456)
     if (!authenticatedUserId) {
       if (otpCode !== '123456') {
         setIsLoading(false);
-        return { success: false, error: 'Invalid OTP code. Use demo code 123456 or real Firebase SMS code.' };
+        return { success: false, error: 'Invalid OTP code. Use demo code 123456.' };
       }
       authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
     }
@@ -234,7 +195,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
-        await supabase.auth.signOut();
+        if (supabase && supabase.auth) {
+          await supabase.auth.signOut();
+        }
       } catch (e) {
         console.error(e);
       }
@@ -255,8 +218,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
-      {/* Invisible Recaptcha container for Firebase Phone Auth */}
-      <div id="recaptcha-container" />
     </AuthContext.Provider>
   );
 };
