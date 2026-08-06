@@ -79,6 +79,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (savedOrders) {
       try { setOrders(JSON.parse(savedOrders)); } catch (e) { console.error(e); }
     }
+
+    // Always request live device GPS location when user opens the website
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.formatted_address) {
+                const detectedAddress: Address = {
+                  id: 'addr-live-gps',
+                  title: 'Current Location',
+                  address_line: data.formatted_address,
+                  city: data.city || 'Local Area',
+                  pincode: data.pincode || '',
+                  latitude: lat,
+                  longitude: lng,
+                  is_default: true,
+                };
+                setSelectedAddress(detectedAddress);
+              }
+            })
+            .catch((err) => console.error('Geocode init error', err));
+        },
+        (err) => {
+          console.log('Location permission denied or timeout on website load', err);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
   }, []);
 
   // Save to localStorage when state changes

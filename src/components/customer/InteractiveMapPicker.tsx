@@ -73,17 +73,18 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
           if (mapInstance) {
             if ((window as any).google && mapInstance.panTo) {
               mapInstance.panTo({ lat: userLat, lng: userLng });
-              mapInstance.setZoom(16);
+              mapInstance.setZoom(17);
             } else if ((window as any).L && mapInstance.setView) {
-              mapInstance.setView([userLat, userLng], 16);
+              mapInstance.setView([userLat, userLng], 17);
             }
           }
           resolveAddressForCoords(userLat, userLng);
         },
-        () => {
+        (err) => {
           setIsLocating(false);
+          console.warn('Geolocation failed or permission denied:', err);
         },
-        { enableHighAccuracy: true, timeout: 6000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
   };
