@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Search, Loader2, Check } from 'lucide-react';
+import { MapPin, Navigation, Search, Loader2, Plus, Minus } from 'lucide-react';
 
 interface InteractiveMapPickerProps {
   initialLat?: number;
@@ -22,7 +22,6 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markerInstanceRef = useRef<any>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isLocating, setIsLocating] = useState(false);
@@ -32,7 +31,6 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
   const [currentPincode, setCurrentPincode] = useState('');
   const [currentLat, setCurrentLat] = useState(initialLat);
   const [currentLng, setCurrentLng] = useState(initialLng);
-  const [mapLoaded, setMapLoaded] = useState(false);
 
   // Reverse geocode via server-side route
   const resolveAddressForCoords = async (latitude: number, longitude: number) => {
@@ -69,7 +67,6 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
     if (apiKey && apiKey.trim() !== '' && !apiKey.includes('your-google-maps')) {
-      // Load Google Maps Script Dynamically
       if (typeof window !== 'undefined' && !(window as any).google) {
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
@@ -84,7 +81,6 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
         initGoogleMap(initialLat, initialLng);
       }
     } else {
-      // Load Leaflet OpenStreetMap Fallback Dynamically
       if (typeof window !== 'undefined') {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -115,17 +111,15 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
     const map = new google.maps.Map(mapContainerRef.current, {
       center: { lat, lng },
       zoom: 16,
-      disableDefaultUI: true,
+      disableDefaultUI: false,
       zoomControl: true,
+      scrollwheel: true,
+      gestureHandling: 'greedy',
     });
 
     mapInstanceRef.current = map;
-    setMapLoaded(true);
-
-    // Initial reverse geocode
     resolveAddressForCoords(lat, lng);
 
-    // Pan listener
     map.addListener('idle', () => {
       const center = map.getCenter();
       const newLat = center.lat();
@@ -146,7 +140,7 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
     const map = L.map(mapContainerRef.current, {
       center: [lat, lng],
       zoom: 16,
-      zoomControl: false,
+      zoomControl: true,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -155,8 +149,6 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
     }).addTo(map);
 
     mapInstanceRef.current = map;
-    setMapLoaded(true);
-
     resolveAddressForCoords(lat, lng);
 
     map.on('moveend', () => {
@@ -165,7 +157,30 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
     });
   };
 
-  // Move Map Pin to User's Current GPS Location (Zomato/Swiggy "Locate Me")
+  // Zoom Control Handlers
+  const handleZoomIn = () => {
+    if (mapInstanceRef.current) {
+      if ((window as any).google && mapInstanceRef.current.getZoom) {
+        const currentZoom = mapInstanceRef.current.getZoom();
+        mapInstanceRef.current.setZoom(currentZoom + 1);
+      } else if ((window as any).L && mapInstanceRef.current.zoomIn) {
+        mapInstanceRef.current.zoomIn();
+      }
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstanceRef.current) {
+      if ((window as any).google && mapInstanceRef.current.getZoom) {
+        const currentZoom = mapInstanceRef.current.getZoom();
+        mapInstanceRef.current.setZoom(Math.max(1, currentZoom - 1));
+      } else if ((window as any).L && mapInstanceRef.current.zoomOut) {
+        mapInstanceRef.current.zoomOut();
+      }
+    }
+  };
+
+  // Move Map Pin to User's Current GPS Location
   const handleLocateMe = () => {
     setIsLocating(true);
     if ('geolocation' in navigator) {
@@ -215,6 +230,33 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
 
     setIsGeocoding(true);
     try {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      if (apiKey && apiKey.trim() !== '' && !apiKey.includes('your-google-maps')) {
+        const googleRes = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(searchQuery)}&key=${apiKey}`
+        );
+        const googleData = await googleRes.json();
+        if (googleData.results && googleData.results.length > 0) {
+          const top = googleData.results[0];
+          const location = top.geometry.location;
+          const newLat = location.lat;
+          const newLng = location.lng;
+
+          if (mapInstanceRef.current) {
+            if ((window as any).google && mapInstanceRef.current.panTo) {
+              mapInstanceRef.current.panTo({ lat: newLat, lng: newLng });
+              mapInstanceRef.current.setZoom(16);
+            } else if ((window as any).L && mapInstanceRef.current.setView) {
+              mapInstanceRef.current.setView([newLat, newLng], 16);
+            }
+          }
+          resolveAddressForCoords(newLat, newLng);
+          setIsGeocoding(false);
+          return;
+        }
+      }
+
+      // OSM search fallback
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`
       );
@@ -250,12 +292,12 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search colony, area, landmark (e.g. Banjara Hills, Green Park)..."
+          placeholder="Search colony, area, landmark (e.g. Uppinangady, BC Road, Melkar)..."
           className="w-full pl-10 pr-24 py-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-medium"
         />
         <button
           type="submit"
-          className="absolute right-1.5 top-1.5 bottom-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
+          className="absolute right-1.5 top-1.5 bottom-1.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
         >
           Search
         </button>
@@ -265,7 +307,7 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
       <div className="relative w-full h-64 md:h-80 rounded-3xl overflow-hidden shadow-inner border border-neutral-200 bg-neutral-100">
         <div ref={mapContainerRef} className="w-full h-full" />
 
-        {/* Zomato/Swiggy Center Draggable Location Pin */}
+        {/* Centered Draggable Location Pin */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-20 flex flex-col items-center">
           <div className="bg-neutral-900 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg mb-1 whitespace-nowrap animate-bounce flex items-center space-x-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -273,6 +315,26 @@ export const InteractiveMapPicker: React.FC<InteractiveMapPickerProps> = ({
           </div>
           <MapPin className="w-10 h-10 text-emerald-600 drop-shadow-xl fill-emerald-100" />
           <div className="w-3 h-1.5 bg-black/30 rounded-full blur-[2px] mt-[-4px]" />
+        </div>
+
+        {/* Custom Zoom Controls (+ / -) */}
+        <div className="absolute top-4 right-4 z-30 flex flex-col space-y-1">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="w-9 h-9 bg-white hover:bg-neutral-50 text-neutral-800 rounded-xl shadow-lg border border-neutral-200 flex items-center justify-center font-bold text-lg active:scale-95 transition-all"
+            title="Zoom In"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="w-9 h-9 bg-white hover:bg-neutral-50 text-neutral-800 rounded-xl shadow-lg border border-neutral-200 flex items-center justify-center font-bold text-lg active:scale-95 transition-all"
+            title="Zoom Out"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Floating "Locate Me" Button */}

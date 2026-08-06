@@ -77,7 +77,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             <div>
               <h3 className="font-extrabold text-lg">Select Delivery Location</h3>
               <p className="text-xs text-emerald-100">
-                Drag map pin or click &apos;Locate Me&apos; like Zomato & Swiggy
+                Drag map pin or click &apos;Locate Me&apos; to set your exact location
               </p>
             </div>
           </div>
