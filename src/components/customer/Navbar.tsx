@@ -66,14 +66,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Location Selector Pill */}
           <button
             onClick={onOpenLocationPicker}
-            className="hidden sm:flex items-center space-x-2 bg-neutral-50 hover:bg-emerald-50/70 border border-neutral-200 hover:border-emerald-300 px-3.5 py-1.5 rounded-full text-left transition-all max-w-[220px]"
+            className="flex items-center space-x-1.5 bg-neutral-50 hover:bg-emerald-50/70 border border-neutral-200 hover:border-emerald-300 px-2.5 sm:px-3.5 py-1.5 rounded-full text-left transition-all max-w-[125px] sm:max-w-[220px]"
           >
-            <MapPin className="w-4 h-4 text-emerald-600 flex-shrink-0 animate-pulse" />
+            <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 flex-shrink-0 animate-pulse" />
             <div className="truncate">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block leading-tight">
-                Delivery To ({selectedAddress?.title || 'Address'})
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 block leading-tight truncate">
+                {selectedAddress?.title || 'Deliver To'}
               </span>
-              <span className="text-xs font-semibold text-neutral-700 truncate block">
+              <span className="text-[10px] sm:text-xs font-semibold text-neutral-700 truncate block">
                 {selectedAddress?.address_line || 'Select location'}
               </span>
             </div>

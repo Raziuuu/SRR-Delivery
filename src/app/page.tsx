@@ -25,7 +25,7 @@ import { Clock, ArrowRight } from 'lucide-react';
 
 export default function CustomerHomePage() {
   const { user, isLoading } = useAuth();
-  const { orders } = useCart();
+  const { orders, cart, grandTotal } = useCart();
 
   // Modals & Gate state
   const [guestUnlocked, setGuestUnlocked] = useState(false);
@@ -186,6 +186,34 @@ export default function CustomerHomePage() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
       />
+
+      {/* Mobile Floating Bottom Cart Action Bar */}
+      {cart.length > 0 && !isCartOpen && !isCheckoutOpen && (
+        <div className="fixed bottom-4 left-4 right-4 z-40 md:hidden animate-slide-up">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-500/30 active:scale-98 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center font-black text-xs">
+                {cart.reduce((sum, item) => sum + item.quantity, 0)}
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-200 block leading-tight">
+                  View Cart
+                </span>
+                <span className="text-sm font-black text-white">
+                  ₹{grandTotal}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-1 text-xs font-black bg-white text-emerald-900 px-3 py-1.5 rounded-xl shadow-sm">
+              <span>Checkout</span>
+              <ArrowRight className="w-3.5 h-3.5 text-emerald-700" />
+            </div>
+          </button>
+        </div>
+      )}
     </main>
   );
 }
