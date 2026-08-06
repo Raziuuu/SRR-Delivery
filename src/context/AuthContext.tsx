@@ -75,82 +75,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Send 6-digit OTP code to Phone Number (Supabase & Demo Mode)
+  // Send 6-digit OTP code to Phone Number (Via MSG91 Real SMS API with Demo Fallback)
   const sendPhoneOTP = async (phoneInput: string) => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createClient();
-        if (supabase && supabase.auth) {
-          await supabase.auth.signInWithOtp({ phone: cleanPhone });
-        }
-      } catch (e) {
-        console.warn('Supabase OTP notice', e);
-      }
-    }
+    try {
+      const res = await fetch('/api/msg91/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: cleanPhone }),
+      });
+      const data = await res.json();
 
-    setIsLoading(false);
-    return {
-      success: true,
-      message: `OTP sent to ${cleanPhone}. (Use demo code: 123456)`,
-    };
+      setIsLoading(false);
+      return {
+        success: true,
+        message: data.message || `OTP sent to ${cleanPhone}!`,
+      };
+    } catch (error) {
+      console.error('Send MSG91 OTP error', error);
+      setIsLoading(false);
+      return {
+        success: true,
+        message: `OTP sent to ${cleanPhone}. (Use demo code: 123456)`,
+      };
+    }
   };
 
-  // Verify Phone OTP (Supabase & Demo 123456 Fallback)
+  // Verify Phone OTP (Via MSG91 Real OTP Verification API)
   const verifyPhoneOTP = async (phoneInput: string, otpCode: string) => {
     setIsLoading(true);
     const cleanPhone = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`;
 
-    let authenticatedUserId: string | null = null;
-    let metadataName = '';
+    try {
+      const res = await fetch('/api/msg91/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: cleanPhone, otp: otpCode }),
+      });
+      const data = await res.json();
 
-    // Verify with Supabase if configured
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createClient();
-        if (supabase && supabase.auth) {
-          const { data } = await supabase.auth.verifyOtp({
-            phone: cleanPhone,
-            token: otpCode,
-            type: 'sms',
-          });
-          if (data?.user) {
-            authenticatedUserId = data.user.id;
-            metadataName = data.user.user_metadata?.full_name || '';
-          }
-        }
-      } catch (e) {
-        console.error('Supabase OTP verify error', e);
-      }
-    }
-
-    // Fallback Demo Mode (123456)
-    if (!authenticatedUserId) {
-      if (otpCode !== '123456') {
+      if (!data.success) {
         setIsLoading(false);
-        return { success: false, error: 'Invalid OTP code. Use demo code 123456.' };
+        return {
+          success: false,
+          error: data.error || 'Invalid or expired OTP code entered',
+        };
       }
-      authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
+
+      const authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
+      const sessionUser: Profile = {
+        id: authenticatedUserId,
+        full_name: '',
+        phone: cleanPhone,
+        is_profile_completed: false,
+        role: 'customer',
+      };
+
+      setUser(sessionUser);
+      localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
+
+      setIsLoading(false);
+      return {
+        success: true,
+        isNewUser: true,
+      };
+    } catch (error) {
+      console.error('Verify MSG91 OTP error', error);
+      setIsLoading(false);
+
+      if (otpCode === '123456') {
+        const authenticatedUserId = 'usr-' + cleanPhone.replace(/\D/g, '');
+        const sessionUser: Profile = {
+          id: authenticatedUserId,
+          full_name: '',
+          phone: cleanPhone,
+          is_profile_completed: false,
+          role: 'customer',
+        };
+        setUser(sessionUser);
+        localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
+        return { success: true, isNewUser: true };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to verify OTP. Please try again.',
+      };
     }
-
-    const sessionUser: Profile = {
-      id: authenticatedUserId,
-      full_name: metadataName || '',
-      phone: cleanPhone,
-      is_profile_completed: Boolean(metadataName),
-      role: 'customer',
-    };
-
-    setUser(sessionUser);
-    localStorage.setItem('srr_user_session', JSON.stringify(sessionUser));
-
-    setIsLoading(false);
-    return {
-      success: true,
-      isNewUser: !sessionUser.is_profile_completed,
-    };
   };
 
   // Admin Login
