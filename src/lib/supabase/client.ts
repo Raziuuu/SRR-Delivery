@@ -1,14 +1,20 @@
 import { createBrowserClient } from '@supabase/ssr';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tvrkglakafzmsyrgcynk.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+const cleanUrl = (url?: string) => (url ? url.replace(/['"]/g, '').trim() : '');
+const cleanKey = (key?: string) => (key ? key.replace(/['"]/g, '').trim() : '');
+
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tvrkglakafzmsyrgcynk.supabase.co';
+const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+
+const supabaseUrl = cleanUrl(rawUrl);
+const supabaseAnonKey = cleanKey(rawKey);
 
 export const isSupabaseConfigured = () => {
   return (
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder') &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.includes('placeholder')
+    supabaseUrl &&
+    !supabaseUrl.includes('placeholder') &&
+    supabaseAnonKey &&
+    !supabaseAnonKey.includes('placeholder')
   );
 };
 
