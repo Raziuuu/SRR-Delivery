@@ -3,7 +3,7 @@ import { createBrowserClient } from '@supabase/ssr';
 const cleanUrl = (url?: string) => (url ? url.replace(/['"]/g, '').trim() : '');
 const cleanKey = (key?: string) => (key ? key.replace(/['"]/g, '').trim() : '');
 
-const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tvrkglakafzmsyrgcynk.supabase.co';
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://glnygxwnmxngkreyizjm.supabase.co';
 const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 
 const supabaseUrl = cleanUrl(rawUrl);
